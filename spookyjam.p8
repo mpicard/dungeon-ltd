@@ -140,7 +140,7 @@ function entity:create()
 end
 
 function update_with(e,fn)
- for c in all(components) do
+ for _,c in pairs(components) do
   if e[c] then
    local a=entities_with[c] or {}
    fn(a,e)
@@ -150,13 +150,13 @@ function update_with(e,fn)
 end
 
 function update_entities()
- for n,e in pairs(entities) do
+ for i,e in pairs(entities) do
   local fn=e[e.state]
   local r=fn and fn(e,e.t) or nil
 
   if r then
    if r==true then
-    entities[n]=nil
+    entities[i]=nil
     update_with(e,del)
    else
     assign(e,{state=r,t=0})
@@ -168,7 +168,7 @@ function update_entities()
 end
 
 function draw_entities()
- for e in all(entities_with.draw) do
+ for _,e in pairs(entities_with.draw) do
   e:draw()
  end
 end
@@ -204,20 +204,19 @@ cards={c_attack,c_torch,c_heal}
 
 function c_attack:s_exec()
  printh("attack "..self.parent.name..">"..self.target.name)
-	local t=self.target
-	t.health-=1
-	sfx(0)
+ local t=self.target
+ t.health-=1
+ sfx(0)
  return true
 end
 
 function c_torch:s_exec()
- printh("torch "..self.parent.name)
+ self.parent.torch=min(self.parent.torch+1,10)
  return true
 end
 
 function c_heal:s_exec()
- printh("heal "..self.parent.name)
- self.parent.health=max(self.parent.health+1,10)
+ self.parent.health=min(self.parent.health+1,10)
  return true
 end
 
@@ -280,7 +279,7 @@ function player:s_startturn()
   add(self.hand,pick_card(cards))
  until #self.hand>=3
 
- for i,c in pairs(self.han) do
+ for i,c in pairs(self.hand) do
   c.pos=v(i*32-15,90)
   c.do_draw=true
   c.parent=self
@@ -361,7 +360,7 @@ function enemy:s_startturn()
   add(self.hand,c_attack:new())
  end
  for i=1,#self.hand do
-		self.hand[i].parent=self
+  self.hand[i].parent=self
  end
  return "s_selectcard"
 end
