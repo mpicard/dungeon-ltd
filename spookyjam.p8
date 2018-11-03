@@ -21,6 +21,7 @@ function start_game()
  add(turn,enemy1)
  add(turn,enemy2)
  card_cursor=0
+ next_actor()
 end
 
 function _init()
@@ -31,11 +32,6 @@ end
 
 function _update()
  update_entities()
-
- local a=turn[1]
- if a.state=="s_default" then
-  a.state="s_startturn"
- end
 
  debug="p  "
   ..player.state.."\ne1 "
@@ -50,7 +46,7 @@ function _draw()
  draw_entities()
 
  --temp draw torch
- print("torch "..player.light,24,62,7)
+ print("torch "..player.torch,24,62,7)
 
  if debug!="" then
   print(debug,0,0,7)
@@ -61,6 +57,7 @@ function next_actor()
  local a=turn[1]
  del(turn,a)
  add(turn,a)
+ a.state="s_startturn"
  return a
 end
 -->8
@@ -177,10 +174,16 @@ end
 
 card=kind({
  extends=entity,
- size=v(26,30),
+ size=v(28,30),
  selected=false,
- clr=7,
+ col=7,
  target=nil
+})
+
+c_attack=kind({
+ extends=card,
+ card="attack",
+ col=8
 })
 
 c_torch=kind({
@@ -188,42 +191,59 @@ c_torch=kind({
  card="torch"
 })
 
-c_attack=kind({
- extends=card,
- card="attack",
- clr=8
-})
-
 c_heal=kind({
  extends=card,
  card="heal",
- clr=3
+ col=3
+})
+
+c_snub=kind({
+ extends=card,
+ card="snub"
 })
 
 cards={c_attack,c_torch,c_heal}
+player_cards={c_attack,c_torch,c_heal}
+enemy_cards={c_attack,c_heal,c_snub}
+
+function card:reduce_torch()
+local t=self.parent.torch
+ if t then
+  t=max(t-1,0)
+ end
+end
 
 function c_attack:s_exec()
  printh("attack "..self.parent.name..">"..self.target.name)
- local t=self.target
- t.health-=1
+ self.target.health=max(self.target.health-1,0)
+ self:reduce_torch()
  sfx(0)
  return true
 end
 
 function c_torch:s_exec()
+ printh("torch-- "..self.parent.name)
  self.parent.torch=min(self.parent.torch+1,10)
  return true
 end
 
 function c_heal:s_exec()
+ printh("heal++ "..self.parent.name)
  self.parent.health=min(self.parent.health+1,10)
+ self:reduce_torch()
  return true
 end
 
+function c_snub:s_exec()
+ printh("snub "..self.parent.name..">"..self.target.name)
+ self.target.torch=max(self.target.torch-1,0)
+ self:reduce_torch()
+ return true
+end
 
 function pick_card()
- local i=flr(rnd(#cards))+1
- return cards[i]:new()
+ local i=flr(rnd(#player_cards))+1
+ return player_cards[i]:new()
 end
 
 function card:draw()
@@ -232,12 +252,14 @@ function card:draw()
   if sl then
    p+=v(0,-4)
   end
-  rectfill(p.x,p.y,p.x+s.x,p.y+s.y,self.clr)
+  rectfill(p.x,p.y,p.x+s.x,p.y+s.y,self.col)
   if sl then
-   print("🅾️",p.x+s.x-7,p.y+s.y-5,0)
+   print("🅾️ use",p.x+1,p.y+s.y-11,0)
+   print("❎ disc",p.x+1,p.y+s.y-5,0)
   end
   --debugging
-  print(self.card,p.x+2,p.y+2,0)
+  p+=v((self.size.x-#self.card*4)/2+1,2)
+  print(self.card,p.x,p.y,0)
  end
 end
 -->8
@@ -245,14 +267,14 @@ end
 
 actor=kind({
  extends=entity,
- clr=7,
+ col=7,
  pos=v(0,0),
  hand={},
  health=10
 })
 
 function actor:draw()
- local p,c=self.pos,self.clr
+ local p,c=self.pos,self.col
  rectfill(p.x,p.y,p.x+20,p.y+20,c)
  --hp
  p+=v(2,-4)
@@ -270,7 +292,7 @@ end
 player=actor:new({
  name="player",
  pos=v(30,40),
- light=10,
+ torch=10,
  hand={}
 })
 
@@ -280,7 +302,7 @@ function player:s_startturn()
  until #self.hand>=3
 
  for i,c in pairs(self.hand) do
-  c.pos=v(i*32-15,90)
+  c.pos=v(i*31-28,90)
   c.do_draw=true
   c.parent=self
  end
@@ -292,28 +314,24 @@ function player:s_selectcard()
  for i=1,#self.hand do
   self.hand[i].selected=i==self.i+1
  end
+ self.card=self.hand[self.i+1]
 
  if btnp(⬅️) then
   self.i=(self.i-1)%#self.hand
  elseif btnp(➡️) then
   self.i=(self.i+1)%#self.hand
  elseif btnp(🅾️) then
-  local c=self.hand[self.i+1]
-  if c.card=="attack" then
+  if self.card.card=="attack" then
    self.i=0
-   self.card=c
    return "s_selecttarget"
   end
-  del(self.hand,c)
-  assert(#self.hand==2)
-  c.state="s_exec"
+  return "s_endturn"
+ elseif btnp(❎) then
   return "s_endturn"
  end
 end
 
 function player:s_selecttarget()
--- printh("select target")
- local c=self.card
  local ee=entities_with.enemy
  for i=1,#ee do
    ee[i].selected=i==self.i+1
@@ -324,16 +342,17 @@ function player:s_selecttarget()
  elseif btnp(➡️) then
   self.i=(self.i+1)%#ee
  elseif btnp(🅾️) then
-  c.target=ee[self.i+1]
-  c.state="s_exec"
-  del(self.hand,c)
-  assert(#self.hand==2)
+  self.card.target=ee[self.i+1]
   return "s_endturn"
  end
 end
 
 function player:s_endturn()
- next_actor().state="s_startturn"
+ self.card.state="s_exec"
+ del(self.hand,self.card)
+ assert(#self.hand==2)
+ self.card=nil
+ next_actor()
  --deselect enemies
  local ee=entities_with.enemy
  for i=1,#ee do
@@ -353,11 +372,11 @@ enemy=kind({
  hand={},
  sleep=40
 })
-
 function enemy:s_startturn()
  for i=#self.hand+1,3 do
-  -- todo +enemy cards
-  add(self.hand,c_attack:new())
+  --todo more enemy cards
+  local c=enemy_cards[flr(rnd(#enemy_cards)+1)]
+  add(self.hand,c:new())
  end
  for i=1,#self.hand do
   self.hand[i].parent=self
@@ -367,25 +386,22 @@ end
 
 function enemy:s_selectcard()
  if self.t>self.sleep then
-  local i=flr(rnd(#self.hand))+1
+  --todo strategically pick card
+  local i=flr(rnd(#self.hand)+1)
   local c=self.hand[i]
   c.parent=self
   c.target=player
-  c.state="s_exec"
-  del(self.hand,c)
-  assert(#self.hand==2)
+  self.card=c
   return "s_endturn"
  end
 end
 
 function enemy:s_endturn()
- next_actor().state="s_startturn"
- --deselect enemies
- local ee=entities_with.enemy
- for i=1,#ee do
-  ee[i].selected=false
- end
-
+ self.card.state="s_exec"
+ del(self.hand,self.card)
+ assert(#self.hand==2)
+ self.card=nil
+ next_actor()
  return "s_default"
 end
 
