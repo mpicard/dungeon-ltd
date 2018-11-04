@@ -53,18 +53,6 @@ end
 -->8
 -- utilities
 
-function quadrant(v)
- if abs(v.x)>abs(v.y) then
-  return v.x>0 and 3 or 1
- else
-  return v.y>0 and 4 or 2
- end
-end
-
-function round(x)
- return flr(x+0.5)
-end
-
 function set(obj,props)
  obj=obj or {}
  for k,v in pairs(props) do
@@ -95,9 +83,6 @@ function vec.__add(v1,v2)
 end
 function vec.__sub(v1,v2)
  return v(v1.x-v2.x,v1.y-v2.y)
-end
-function vec.__mul(v1,a)
- return v(v1.x*a,v1.y*a)
 end
 function vec.__mul(v1,a)
  return v(v1.x*a,v1.y*a)
@@ -437,7 +422,7 @@ end
 
 function reset_palette()
  pal()
- palt(3,true)
+--  palt(3,true)
  palt(0,false)
 end
 
@@ -452,8 +437,7 @@ end
 
 light=kind({
  extends=entity,
- off=v(0,0),
- cbox=make_box(-1,-1,1,1)
+ off=v(0,0)
 })
 function light:s_default()
  for i=0,3 do
